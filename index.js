@@ -1,8 +1,7 @@
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const session = require("express-session");
-const passport = require("passport");
-const LocalStrategy = require("passport-local").Strategy;
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
 
@@ -23,37 +22,9 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   searchHistory: [{ type: String }],
+  userId: { type: String }
 });
 const User = mongoose.model("User", userSchema);
-
-passport.use(
-  new LocalStrategy(async function (username, password, done) {
-    try {
-      const user = await User.findOne({ username: username });
-      if (!user) {
-        return done(null, false);
-      }
-      if (user.password !== password) {
-        return done(null, false);
-      }
-      return done(null, user);
-    } catch (err) {
-      return done(err);
-    }
-  })
-);
-passport.serializeUser(function (user, done) {
-  done(null, user.id);
-});
-
-passport.deserializeUser(async function (id, done) {
-  try {
-    const user = await User.findById(id);
-    done(null, user);
-  } catch (err) {
-    done(err);
-  }
-});
 
 // create express app
 const app = express();
@@ -66,30 +37,46 @@ app.use(
     saveUninitialized: false,
   })
 );
-app.use(passport.initialize());
-app.use(passport.session());
 
-// new user registration endpoint
 app.post("/newuser", async (req, res) => {
   const { username, password } = req.body;
   const user = new User({ username, password });
+
   try {
     await user.save();
-    res.send("User registered successfully");
+    res.json({ userId: user._id }); // Send userId as JSON response
   } catch (err) {
     console.error(err);
     res.status(500).send("Error registering user");
   }
 });
 
+
 // login endpoint
-app.post("/login", passport.authenticate("local"), (req, res) => {
-  res.send("Login successful");
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user || user.password !== password) {
+      res.status(401).json({ error: "Invalid credentials" });
+    } else {
+      req.session.user = user;
+      res.json({ userId: user._id }); // Send the user ID as a JSON response
+      console.log("Login successful");
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error during login" });
+    console.log("Error during login");
+  }
 });
+
+
 
 // logout endpoint
 app.post("/logout", (req, res) => {
-  req.logout();
+  req.session.destroy();
   res.send("Logout successful");
 });
 
@@ -100,55 +87,67 @@ const addToHistory = async (username, movie) => {
       const title = movie.title;
       user.searchHistory.push(title);
       await user.save();
-      console.log(
-        `Added movie "${title}" to search history of user "${username}"`
-      );
+      console.log(`Added movie "${title}" to search history of user "${username}"`);
     }
   } catch (err) {
-    console.error(
-      `Error adding movie "${movie.title}" to search history of user "${username}": ${err}`
-    );
+    console.error(`Error adding movie "${movie.title}" to search history of user "${username}": ${err}`);
   }
 };
 
+
+
+
 app.post("/reco", async (req, res) => {
-  const { phrase } = req.body;
-  const user = req.user;
+  const { phrase, userId } = req.body;
+
+  console.log(req.body)
 
   try {
     const response = await fetch(
       API_URL +
         `?api_key=${API_KEY}&language=en-US&query=${phrase}&page=1&include_adult=false`
     );
-    const data = await response.json();
-    // let title = [];
-    const movies = data.results.original_title;
 
-    const title = data.results.map((result) => ({
-      title: result.title,
-    }));
+    if (response.ok) {
+      const data = await response.json();
 
-    const username = req.user.username;
-    // Add searched movies to user's search history
-    title.forEach((movieTitle) => addToHistory(username, movieTitle));
-    res.send(title);
+      const titles = data.results.map((result) => ({
+        title: result.title,
+      }));
+
+      console.log("Movie Titles:", titles);
+
+      for (const title of titles) {
+        await addToHistory(userId, title);
+      }
+
+      res.json(titles);
+    } else {
+      throw new Error("Error fetching movie data");
+    }
   } catch (err) {
     console.error(err);
-    res.status(500).send("Error fetching movie data");
+    res.status(500).json({ error: "Error fetching movie data" });
   }
 });
 
-app.get("/history", (req, res) => {
-  const userId = req.user._id;
+app.get("/history", async (req, res) => {
+  const {userId} = req.body;
 
-  User.findById(userId)
-    .then((history) => {
-      res.json(history);
-    })
-    .catch((err) => {
-      console.error(err);
-      res.status(500).send("Error fetching search history");
-    });
+  // res.json(history)
+
+  try {
+    const user = await User.findById(userId);
+    if (user) {
+      const history = user.history;
+      res.json({ history });
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error retrieving user history" });
+  }
 });
 
 const PORT = 4040;

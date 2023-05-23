@@ -10,9 +10,11 @@
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "https": "^1.0.0",
+    "jsonwebtoken": "^9.0.0",
     "minhash": "^0.0.9",
     "mongoose": "^7.1.0",
     "node-fetch": "^2.6.9",
