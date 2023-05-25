@@ -4,6 +4,7 @@ const bodyParser = require("body-parser");
 const session = require("express-session");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
+const performSearch = require('./movieSearch')
 
 const API_KEY = "8b853ea22b2da094a00861a8d60da1e6";
 const API_URL = "https://api.themoviedb.org/3/search/movie";
@@ -80,14 +81,19 @@ app.post("/logout", (req, res) => {
   res.send("Logout successful");
 });
 
+
 const addToHistory = async (username, movie) => {
   try {
     const user = await User.findOne({ username });
     if (user) {
       const title = movie.title;
-      user.searchHistory.push(title);
-      await user.save();
-      console.log(`Added movie "${title}" to search history of user "${username}"`);
+      if (!user.searchHistory.includes(title)) {
+        user.searchHistory.push(title);
+        await user.save();
+        console.log(`Added movie "${title}" to search history of user "${username}"`);
+      } else {
+        console.log(`Movie "${title}" already exists in search history of user "${username}"`);
+      }
     }
   } catch (err) {
     console.error(`Error adding movie "${movie.title}" to search history of user "${username}": ${err}`);
@@ -102,32 +108,21 @@ app.post("/reco", async (req, res) => {
 
   console.log(req.body)
 
+  
+
   try {
-    const response = await fetch(
-      API_URL +
-        `?api_key=${API_KEY}&language=en-US&query=${phrase}&page=1&include_adult=false`
-    );
+    const searchResults = await performSearch(phrase);
 
-    if (response.ok) {
-      const data = await response.json();
+    console.log("Search Results:", searchResults);
 
-      const titles = data.results.map((result) => ({
-        title: result.title,
-      }));
-
-      console.log("Movie Titles:", titles);
-
-      for (const title of titles) {
-        await addToHistory(userId, title);
-      }
-
-      res.json(titles);
-    } else {
-      throw new Error("Error fetching movie data");
+    for (const movie of searchResults) {
+      await addToHistory(userId, { title: movie });
     }
+
+    res.json(searchResults);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error fetching movie data" });
+    res.status(500).json({ error: "Error performing search" });
   }
 });
 
