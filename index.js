@@ -4,7 +4,46 @@ const bodyParser = require("body-parser");
 const session = require("express-session");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
-const performSearch = require('./movieSearch')
+// const {performSearch, readFilesFromFolder} = require('./movieSearch')
+
+// const FlexSearch = require("flexsearch");
+const { Index, Document } = require("flexsearch");
+
+// const FlexSearch = require('flexsearch');
+const fs = require("fs");
+const index = new Index();
+
+// Folder path
+const folderPath = "Scripts/"; // Replace with the actual folder path
+
+async function readFilesFromFolder(folderPath) {
+  try {
+    const files = await fs.promises.readdir(folderPath);
+    const fileData = {};
+
+    await Promise.all(
+      files.map(async (file) => {
+        const filePath = `${folderPath}/${file}`;
+        const fileContent = await fs.promises.readFile(filePath, "utf-8");
+        fileData[file] = fileContent;
+      })
+    );
+
+    console.log("Files read successfully");
+    return fileData;
+  } catch (err) {
+    console.error("Error reading files:", err);
+    throw err; // Rethrow the error to handle it at the caller's level
+  }
+}
+
+// Function to perform the search
+async function performSearch(phrase) {
+  // Read files and store them in an object
+  
+  const searchResults = Array.from(index.search(phrase)); // Convert to array
+  return searchResults;
+}
 
 const API_KEY = "8b853ea22b2da094a00861a8d60da1e6";
 const API_URL = "https://api.themoviedb.org/3/search/movie";
@@ -27,6 +66,18 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model("User", userSchema);
 
+readFilesFromFolder("Scripts/").then((filesData) =>{
+  // Add documents to the index
+ for (const file in filesData) {
+  const movieName = file
+    .replace(".html", "")
+    .replace(/[-_]/g, " ")
+    .trim();
+  index.add(movieName, filesData[file]);
+  // console.log(movieName)
+}
+})
+ 
 // create express app
 const app = express();
 app.use(bodyParser.json());
