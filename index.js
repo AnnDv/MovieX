@@ -1,15 +1,10 @@
-
 const express = require("express");
 const bodyParser = require("body-parser");
 const session = require("express-session");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
-// const {performSearch, readFilesFromFolder} = require('./movieSearch')
-
-// const FlexSearch = require("flexsearch");
+const cors = require("cors");
 const { Index, Document } = require("flexsearch");
-
-// const FlexSearch = require('flexsearch');
 const fs = require("fs");
 const index = new Index();
 
@@ -40,7 +35,7 @@ async function readFilesFromFolder(folderPath) {
 // Function to perform the search
 async function performSearch(phrase) {
   // Read files and store them in an object
-  
+
   const searchResults = Array.from(index.search(phrase)); // Convert to array
   return searchResults;
 }
@@ -62,25 +57,27 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   searchHistory: [{ type: String }],
-  userId: { type: String }
+  userId: { type: String },
 });
 const User = mongoose.model("User", userSchema);
 
-readFilesFromFolder("Scripts/").then((filesData) =>{
+readFilesFromFolder("Scripts/").then((filesData) => {
   // Add documents to the index
- for (const file in filesData) {
-  const movieName = file
-    .replace(".html", "")
-    .replace(/[-_]/g, " ")
-    .trim();
-  index.add(movieName, filesData[file]);
-  // console.log(movieName)
-}
-})
- 
+  for (const file in filesData) {
+    const movieName = file.replace(".html", "").replace(/[-_]/g, " ").trim();
+    index.add(movieName, filesData[file]);
+    // console.log(movieName)
+  }
+});
+
 // create express app
 const app = express();
 app.use(bodyParser.json());
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+  })
+);
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   session({
@@ -103,7 +100,6 @@ app.post("/newuser", async (req, res) => {
   }
 });
 
-
 // login endpoint
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
@@ -124,14 +120,11 @@ app.post("/login", async (req, res) => {
   }
 });
 
-
-
 // logout endpoint
 app.post("/logout", (req, res) => {
   req.session.destroy();
   res.send("Logout successful");
 });
-
 
 const addToHistory = async (username, movie) => {
   try {
@@ -141,25 +134,26 @@ const addToHistory = async (username, movie) => {
       if (!user.searchHistory.includes(title)) {
         user.searchHistory.push(title);
         await user.save();
-        console.log(`Added movie "${title}" to search history of user "${username}"`);
+        console.log(
+          `Added movie "${title}" to search history of user "${username}"`
+        );
       } else {
-        console.log(`Movie "${title}" already exists in search history of user "${username}"`);
+        console.log(
+          `Movie "${title}" already exists in search history of user "${username}"`
+        );
       }
     }
   } catch (err) {
-    console.error(`Error adding movie "${movie.title}" to search history of user "${username}": ${err}`);
+    console.error(
+      `Error adding movie "${movie.title}" to search history of user "${username}": ${err}`
+    );
   }
 };
-
-
-
 
 app.post("/reco", async (req, res) => {
   const { phrase, userId } = req.body;
 
-  console.log(req.body)
-
-  
+  console.log(req.body);
 
   try {
     const searchResults = await performSearch(phrase);
@@ -178,7 +172,7 @@ app.post("/reco", async (req, res) => {
 });
 
 app.get("/history", async (req, res) => {
-  const {userId} = req.body;
+  const { userId } = req.body;
 
   // res.json(history)
 
